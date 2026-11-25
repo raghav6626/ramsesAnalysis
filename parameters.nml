@@ -1,0 +1,174 @@
+&RUN_PARAMS
+verbose=.false.
+cosmo=.false.
+pic=.true. !Apparently we need this bool to enable particle initialisation in RAMSES. 
+hydro=.true.
+poisson=.true. !Poisson solver for self-gravity
+ncontrol=1 !Frequency of stdout output 
+nremap=7 !Load balancing step in units of the coarse timestep; discuss with Oscar regarding optimum value
+nrestart=0 !Value >1 meaning restart file number
+restart_remap=.true.
+nstepmax=10000000 !max number of coarse timesteps
+nsubcycle=1,1,1,2,2,2,2,2,2,2 !Number of fine level time steps per one coarser level time step. The comma separation separates consecutive AMR levels
+!nsubcycle_load=1,1,1,2,2,2,2,2,2,2 This is not present in the updated docs...
+ordering='hilbert' !Has to do with the domain decomposition. Don't understand at the moment
+rt=.false.
+tracer=.false.
+/
+
+&UNITS_PARAMS
+units_density = 1.573391528d-26		  ! G=1 units, Mass units ~2.35e5 Msun
+units_time    = 3.0868724d16		  ! ~ Gyr
+units_length  = 3.086568025d21 		  ! kpc --> make v_unit=km/s
+/
+
+!==================================
+! Gamma : 5/3
+! With a Jeans pressure floor. 
+! RA: I do not use polytrope because the gas is not adiabatic
+! We use the classical cooling table available in RAMSES (Audit & Hennebelle 200?)
+! barotropic_eos = .true. 
+! barotropic_eos_form = 'polytrope'
+! polytrope_index = 1.666666667
+! mu_gas = 1.314
+!==================================
+&COOLING_PARAMS
+cooling=.true.
+metal=.false.          ! uniform Z, no passive metal scalar
+z_ave=1.0              ! solar metallicity
+haardt_madau=.true.    ! z=0 HM UV background (aexp=1 in non-cosmo runs)
+self_shielding=.true.  ! dense gas shielded from the UV
+T2max=1.0d8            ! optional ceiling
+
+
+/
+
+&HYDRO_PARAMS
+pressure_fix=.true.
+gamma=1.666666667
+courant_factor=0.8
+slope_type=1
+riemann='hlld'
+scheme='muscl'
+beta_fix=0.5 !With pressure_fix=.true., changes the threshold at which the energy is truncated. I have no idea what this could mean
+/
+
+&SF_PARAMS
+jeans_ncells=8
+/
+
+&AMR_PARAMS
+boxlen=164.0 ! The max R in the vcirc.dat file is 205 kpc. For boxes <= 100 kpc you have DM particles initialised out of the box, which causes errors as well. 
+levelmin=9	!128 x 128 x 128 base grid. 
+levelmax=12 ! 1024; res = 80 pc 
+ngridmax=1100000 !you might need to increase this
+npartmax=4000000
+nexpand=18*2 !Number of times the mesh expansion is applied to the refinement map (see mesh smoothing). I still don't understand this btw. 
+/
+
+&INIT_PARAMS
+!This is where I will give-in the particle data file. 
+!The program ic_part.f90 takes care of reading-in the particle data 
+!At the moment, I only have provision for dark matter particles.
+!I concatenate the bulge+disc with the dm particles in ic_part
+filetype='ascii'
+initfile(1)='/home/ra6154ar/ramses_updated/simulations/isolated_galaxy'  ! Location of ic_part
+d_region=1.389e-04 ! this corresponds to d_halo = 1e-6 cm-3 
+u_region = 0
+v_region = 0
+w_region = 0
+p_region=0.8777 !With the above given density. This corresponds to T = 10^6 K 
+/
+
+&OUTPUT_PARAMS
+tend=1.0 !1 Gyr
+delta_tout=0.001 !5 Myr for now
+walltime_hrs=48.0
+minutes_dump=20
+/
+
+!RA: Haven't checked this yet.
+&BOUNDARY_PARAMS
+nboundary=6
+bound_type= 2, 2,  2,  2,  2,  2
+ibound_min=-1, 1, -1, -1, -1, -1
+ibound_max=-1, 1,  1,  1,  1,  1
+jbound_min= 0, 0, -1,  1, -1, -1
+jbound_max= 0, 0, -1,  1,  1,  1
+kbound_min= 0, 0,  0,  0, -1,  1
+kbound_max= 0, 0,  0,  0, -1,  1
+no_inflow=.true.
+/
+
+!RA: What is this x_refine, y_refine and z_refine? 
+&REFINE_PARAMS
+interpol_var=0 !density, momentum, and Total E used for interpolation
+interpol_type=1 !MinMod slope limter
+mass_sph=4.616d-2  !Mass scale used in the next line in code-units. This is the value I take from Kim 2016, Section 4.3
+m_refine=8,8,8,8,8,8,8,8,8,1e10  ! Refine the cell on ith-level if mass_cell(ilevel)>m_refine(ilevel)*mass_sph. Note that 1e10 is set to block refinement 
+!The following is interesting
+!For each refinement level, it decides the centre-coordinates: (x_refine[i], y_refine[i], z_refine[i]) and the DIAMETER where AMR will be active r_refine[i]
+!For any cell outside this region, that is (r-centre_coordinates[i]) > r_refine[i]/2; cells will be refined to levelmin
+!I choose a spherical region with diameter = 30 kpc centred at the origin of the box
+x_refine=10*50.0
+y_refine=10*50.0
+z_refine=10*50.0
+r_refine=10*30.0
+/
+
+&POISSON_PARAMS
+gravity_type=0
+epsilon=1e-3
+!cic_levelmax=14
+/
+
+&MERGER_PARAMS
+Zgas=1.0
+IG_density_factor=5.0D-5 ! seems to be unused in condinit at the moment.
+b0 = 0.002249! The B0 constant. In user-units corresponding to B_cgs = 10e-10
+b_exp = 0.66667 ! B = B_0 (rho/rho_0)^(2/3)
+
+rad_profile='exponential'
+
+gal_center1= 0.0D0 , 0.0D0 , 0.0D0 !This is relative to the box centre. That is, xGalCenter1[i] = gal_center1[i] + boxlen/2.0. Thus [0,0,0] corresponds to the center of the box 
+! Mgaz_disk1=18486.4039    ! Check this once more maybe? 
+Mgaz_disk1= 36930.60 !AGORA disk taken from Kim 2016
+typ_radius1=3.43218d0
+cut_radius1=2.0D1
+typ_height1=0.343218d0
+cut_height1=3.0
+gal_axis1= 0.0D0 , 0.0D0 , 1.0D0
+Vcirc_dat_file1='./Vcirc.dat'
+Vgal1= 0.0D0 , 0.0D0, 0.0D0
+
+
+Vcirc_dat_file2='./Vcirc.dat'
+Mgaz_disk2=0.0D0
+gal_center2= 50.0D0 , 0.0D0 , 0.0D0 !RA: Should be anywhere in the box...
+typ_radius2=1.0D0
+cut_radius2=1.0D0
+typ_height2=0.300
+cut_height2=0.9
+gal_axis2= 0.0D0 , 0.0D0 , 1.0D0
+Vgal2= 0.0D0 , 0.0D0, 0.0D0
+
+/
+
+&MOVIE_PARAMS 
+imovout=6000
+imov=1
+tendmov=1.0 
+movie=.false.
+nw_frame=1638
+nh_frame=1638
+levelmax_frame=15
+ivar_frame=1
+xcentre_frame=250.0,0.0,0.0,0.0,250.0,0.0,0.0,0.0
+ycentre_frame=250.0,0.0,0.0,0.0,250.0,0.0,0.0,0.0
+zcentre_frame=250.0,0.0,0.0,0.0,250.0,0.0,0.0,0.0
+deltax_frame=25.,0.0,25.,0.0
+deltay_frame=25.,0.0,25.,0.0
+deltaz_frame=25.,0.0,25.,0.0
+movie_vars_txt='dens','temp','lum','var6','var7','var8','var9'
+proj_axis='zx'
+/
